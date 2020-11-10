@@ -243,7 +243,7 @@ def _ts_project_impl(ctx):
     # Improves error messaging if a ts_project needs declaration = True
     typings_in_deps = [d for d in ctx.attr.deps if DeclarationInfo in d]
     if len(typings_outputs) or len(typings_in_deps):
-        providers.append(declaration_info(depset(typings_outputs), typings_in_deps))
+        providers.append(declaration_info(depset(typings_outputs), depset([]), typings_in_deps))
         providers.append(OutputGroupInfo(types = depset(typings_outputs)))
 
     return providers

@@ -73,6 +73,7 @@ If package_path is not set the this will be the root node_modules of the workspa
         doc = "Path components to strip from the start of the package import path",
         default = "",
     ),
+    "global_srcs": attr.label_list(allow_files = True),
 }
 
 AmdNamesInfo = provider(
@@ -132,9 +133,10 @@ def _link_path(ctx, all_files):
     return link_path
 
 def _impl(ctx):
-    input_files = ctx.files.srcs + ctx.files.named_module_srcs
+    input_files = ctx.files.srcs + ctx.files.global_srcs + ctx.files.named_module_srcs
     all_files = []
     typings = []
+    global_typings = []
     js_files = []
     named_module_files = []
 
@@ -173,10 +175,13 @@ def _impl(ctx):
             # the tsconfig "lib" attribute
             len(file.path.split("/node_modules/")) < 3 and file.path.find("/node_modules/typescript/lib/lib.") == -1
         ):
-            typings.append(file)
+            if file in ctx.files.global_srcs:
+                global_typings.append(file)
+            else:
+                typings.append(file)
 
         # ctx.files.named_module_srcs are merged after ctx.files.srcs
-        if idx >= len(ctx.files.srcs):
+        if idx >= len(ctx.files.srcs) + len(ctx.files.global_srcs):
             named_module_files.append(file)
 
         # every single file on bin should be added here
@@ -186,6 +191,7 @@ def _impl(ctx):
     js_files_depset = depset(js_files)
     named_module_files_depset = depset(named_module_files)
     typings_depset = depset(typings)
+    global_typings_depset = depset(global_typings)
 
     files_depsets = [files_depset]
     npm_sources_depsets = [files_depset]
@@ -193,6 +199,7 @@ def _impl(ctx):
     direct_sources_depsets = [files_depset]
     direct_named_module_sources_depsets = [named_module_files_depset]
     typings_depsets = [typings_depset]
+    global_typings_depsets = [global_typings_depset]
     js_files_depsets = [js_files_depset]
 
     for dep in ctx.attr.deps:
@@ -211,6 +218,8 @@ def _impl(ctx):
             if DeclarationInfo in dep:
                 typings_depsets.append(dep[DeclarationInfo].declarations)
                 direct_sources_depsets.append(dep[DeclarationInfo].declarations)
+                if getattr(dep[DeclarationInfo], "transitive_global_declarations"):
+                    global_typings_depsets.append(dep[DeclarationInfo].transitive_global_declarations)
             if DefaultInfo in dep:
                 files_depsets.append(dep[DefaultInfo].files)
 
@@ -264,6 +273,7 @@ def _impl(ctx):
         providers.append(declaration_info(
             declarations = decls,
             deps = ctx.attr.deps,
+            global_declarations = depset(transitive = global_typings_depsets)
         ))
         providers.append(OutputGroupInfo(types = decls))
     elif ctx.attr.package_name == "$node_modules_dir$":
