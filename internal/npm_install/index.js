@@ -37,7 +37,7 @@ const RULE_TYPE = args[1];
 const LOCK_FILE_PATH = args[2];
 const INCLUDED_FILES = args[3] ? args[3].split(',') : [];
 const BAZEL_VERSION = args[4];
-const isModuleRegExp = new RegExp('^export', 'm');
+const isModuleRegExp = new RegExp('^export|^import', 'm');
 if (require.main === module) {
     main();
 }
@@ -665,13 +665,13 @@ function printPackage(pkg) {
     }
     const includedRunfiles = filterFiles(pkg._runfiles, config.included_files);
     const pkgFiles = includedRunfiles.filter((f) => !f.startsWith('node_modules/'));
-    const globalFiles = pkgFiles.filter((f) => f.endsWith('.d.ts')).filter((f) => {
+    const ambientFiles = pkgFiles.filter((f) => f.endsWith('.d.ts')).filter((f) => {
         const fileContents = fs.readFileSync(path.join('node_modules', pkg._dir, f), { encoding: 'utf-8' });
         return !isModuleRegExp.test(fileContents);
     });
-    const pkgGlobalFilesStarlark = globalFiles.length ? starlarkFiles('srcs', globalFiles) : '';
-    const nonGlobalFiles = pkgFiles.filter((f) => globalFiles.indexOf(f) === -1);
-    const pkgFilesStarlark = nonGlobalFiles.length ? starlarkFiles('srcs', nonGlobalFiles) : '';
+    const pkgAmbientFilesStarlark = ambientFiles.length ? starlarkFiles('srcs', ambientFiles) : '';
+    const nonAmbientFiles = pkgFiles.filter((f) => ambientFiles.indexOf(f) === -1);
+    const pkgFilesStarlark = nonAmbientFiles.length ? starlarkFiles('srcs', nonAmbientFiles) : '';
     const nestedNodeModules = includedRunfiles.filter((f) => f.startsWith('node_modules/'));
     const nestedNodeModulesStarlark = nestedNodeModules.length ? starlarkFiles('srcs', nestedNodeModules) : '';
     const notPkgFiles = pkg._files.filter((f) => !f.startsWith('node_modules/') && !includedRunfiles.includes(f));
@@ -684,11 +684,11 @@ function printPackage(pkg) {
         '';
     const dtsSources = filterFiles(pkg._runfiles, [
         '.d.ts'
-    ]).filter((f) => !f.startsWith('node_modules/') && globalFiles.indexOf(f) === -1);
+    ]).filter((f) => !f.startsWith('node_modules/') && ambientFiles.indexOf(f) === -1);
     const dtsStarlark = (dtsSources.length ?
         starlarkFiles('srcs', dtsSources, `# ${pkg._dir} package declaration files (and declaration files in nested node_modules)`) :
         '') +
-        (globalFiles.length ? starlarkFiles('global_srcs', globalFiles) : '');
+        (ambientFiles.length ? starlarkFiles('ambient_srcs', ambientFiles) : '');
     const deps = [pkg].concat(pkg._dependencies.filter(dep => dep !== pkg && !dep._isNested));
     const depsStarlark = deps.map(dep => `"//${dep._dir}:${dep._name}__contents",`).join('\n        ');
     let result = `load("@build_bazel_rules_nodejs//:index.bzl", "js_library")
@@ -704,7 +704,7 @@ filegroup(
 
 # Files that have side-effects and must always be loaded
 filegroup(
-    name = "${pkg._name}__global_files",${pkgGlobalFilesStarlark}
+    name = "${pkg._name}__ambient_files",${pkgAmbientFilesStarlark}
 )
 
 # Files that are in the npm package's nested node_modules
@@ -727,7 +727,7 @@ filegroup(
 # but not including nested node_modules.
 filegroup(
     name = "${pkg._name}__all_files",
-    srcs = [":${pkg._name}__files", ":${pkg._name}__global_files", ":${pkg._name}__not_files"],
+    srcs = [":${pkg._name}__files", ":${pkg._name}__ambient_files", ":${pkg._name}__not_files"],
 )
 
 # The primary target for this package for use in rule deps
@@ -737,7 +737,7 @@ js_library(
     package_path = "${config.package_path}",
     # direct sources listed for strict deps support
     srcs = [":${pkg._name}__files"],
-    global_srcs = [":${pkg._name}__global_files"],
+    ambient_srcs = [":${pkg._name}__ambient_files"],
     # nested node_modules for this package plus flattened list of direct and transitive dependencies
     # hoisted to root by the package manager
     deps = [
@@ -750,7 +750,7 @@ js_library(
     name = "${pkg._name}__contents",
     package_name = "${NODE_MODULES_PACKAGE_NAME}",
     package_path = "${config.package_path}",
-    srcs = [":${pkg._name}__files", ":${pkg._name}__global_files", ":${pkg._name}__nested_node_modules"],${namedSourcesStarlark}
+    srcs = [":${pkg._name}__files", ":${pkg._name}__ambient_files", ":${pkg._name}__nested_node_modules"],${namedSourcesStarlark}
     visibility = ["//:__subpackages__"],
 )
 
