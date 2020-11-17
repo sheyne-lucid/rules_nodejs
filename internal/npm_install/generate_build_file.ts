@@ -75,8 +75,8 @@ package(default_visibility = ["${visibility}"])
 `;
 }
 
-const isModuleRegExp = new RegExp('^export|^import', 'm');
-const isNotOnlyDeclaredModuleRegExp = new RegExp('^(?:\w)(?!eclare module)', 'm');
+const isModuleRegExp = /^export|^import/m;
+const isNotOnlyDeclaredModuleRegExp = /^\w(?!eclare module)/m;
 const declaredModulesRegExp = /^declare module ["']([\w-_/]+)["'] \{/gm;
 
 if (require.main === module) {
