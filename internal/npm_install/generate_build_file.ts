@@ -39,7 +39,7 @@
  */
 'use strict';
 
-import {promises as fs, constants, mkdir} from 'fs';
+import {promises as fs, constants, mkdir, readFileSync} from 'fs';
 import * as path from 'path';
 import * as crypto from 'crypto';
 
@@ -1119,8 +1119,7 @@ function printPackage(pkg: Dep) {
   // (filtered by the 'included_files' attribute)
   const pkgFiles = includedRunfiles.filter((f: string) => !f.startsWith('node_modules/'));
   const ambientFiles = pkgFiles.filter((f) => f.endsWith('.d.ts')).filter((f) => {
-    const fileContents =
-        fs.readFileSync(path.join('node_modules', pkg._dir, f), {encoding: 'utf-8'});
+    const fileContents = readFileSync(path.join('node_modules', pkg._dir, f), {encoding: 'utf-8'});
     if (isModuleRegExp.test(fileContents)) {
       return false;
     } else {

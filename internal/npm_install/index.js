@@ -31,12 +31,6 @@ package(default_visibility = ["${visibility}"])
 
 `;
 }
-const args = process.argv.slice(2);
-const WORKSPACE = args[0];
-const RULE_TYPE = args[1];
-const LOCK_FILE_PATH = args[2];
-const INCLUDED_FILES = args[3] ? args[3].split(',') : [];
-const BAZEL_VERSION = args[4];
 const isModuleRegExp = /^export|^import/m;
 const isNotOnlyDeclaredModuleRegExp = /^\w(?!eclare module)/m;
 const declaredModulesRegExp = /^declare module ["']([\w-_/]+)["'] \{/gm;
@@ -599,6 +593,24 @@ function findFile(pkg, m) {
     }
     return undefined;
 }
+function mapOfSetsToObjOfArray(map, mapFn) {
+    const ret = {};
+    for (const [key, value] of map.entries()) {
+        ret[key] = Array.from(value, mapFn);
+    }
+    return ret;
+}
+function matchAll(string, regex) {
+    if (regex.flags.indexOf('g') === -1) {
+        throw new Error('matchAll will infinitely loop without the `g` flag set');
+    }
+    const matches = [];
+    let match;
+    while ((match = regex.exec(string)) !== null) {
+        matches.push(match);
+    }
+    return matches;
+}
 function printPackageExperimentalDirectoryArtifacts(pkg) {
     const deps = [pkg].concat(pkg._dependencies.filter(dep => dep !== pkg && !dep._isNested));
     const depsStarlark = deps.map(dep => `"//${dep._dir}:${dep._name}__contents",`).join('\n        ');
@@ -658,24 +670,6 @@ npm_umd_bundle(
     }
     return result;
 }
-function mapOfSetsToObjOfArray(map, mapFn) {
-    const ret = {};
-    for (const [key, value] of map.entries()) {
-        ret[key] = Array.from(value, mapFn);
-    }
-    return ret;
-}
-function matchAll(string, regex) {
-    if (regex.flags.indexOf('g') === -1) {
-        throw new Error('matchAll will infinitely loop without the `g` flag set');
-    }
-    const matches = [];
-    let match;
-    while ((match = regex.exec(string)) !== null) {
-        matches.push(match);
-    }
-    return matches;
-}
 function printPackage(pkg) {
     function starlarkFiles(attr, files, comment = '') {
         return `
@@ -690,7 +684,7 @@ function printPackage(pkg) {
     let declaredModules = undefined;
     const pkgFiles = includedRunfiles.filter((f) => !f.startsWith('node_modules/'));
     const ambientFiles = pkgFiles.filter((f) => f.endsWith('.d.ts')).filter((f) => {
-        const fileContents = fs.readFileSync(path.join('node_modules', pkg._dir, f), { encoding: 'utf-8' });
+        const fileContents = fs_1.readFileSync(path.join('node_modules', pkg._dir, f), { encoding: 'utf-8' });
         if (isModuleRegExp.test(fileContents)) {
             return false;
         }
